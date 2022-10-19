@@ -107,3 +107,16 @@ def sleep_before_request(rate_limit_info: dict):
     print(f'Sleeping for {time_left_before_reset}sec. {reqs_left} reqs left')
     time.sleep(time_left_before_reset)
   return
+
+
+def file_for_repo_exists(owner: str, name: str):
+  """ Checks if a file for the repo exists and returns the amountof PRs it has """
+  file_path = f'out/{owner}---{name}.csv'
+  if not os.path.isfile(file_path):
+    print(f'{owner}/{name} does not exist')
+    return None
+  
+  df = pd.read_csv(file_path)
+  row_count = df.shape[0]
+  print(f'{owner}/{name} exists. {row_count} PRs counted')
+  return row_count

@@ -21,13 +21,15 @@ def get_paginated(
   query: str,
   results: list,
   use_backup_token: bool,
-  rate_limit_info: dict
+  rate_limit_info: dict,
+  row_count: int,
+  retry_count: int,
   ) -> dict:
   """ Makes GraphQL queries that are paginated """
   if max_value and total_count >= max_value:
     return results
 
-  print(f'**{owner}/{name} [{total_count} reqs made]: Running cursor {cursor}')
+  print(f'**{owner}/{name} [{total_count}/{max_value} reqs made]: Running cursor {cursor}')
   
   edited_query = query
   cursor_text = 'null' if cursor is None else f'"{cursor}"'
@@ -36,14 +38,45 @@ def get_paginated(
   edited_query = edited_query.replace('$name', f'"{name}"')
   edited_query = edited_query.replace('$owner', f'"{owner}"')
   response = api_call(edited_query, use_backup_token, rate_limit_info)
+
+  # Handles reponse errors
   try:
     pull_requests = response['data']['repository']['pullRequests']
   except:
     print(response)
     print('***** ERROR')
-    exit()
+    # Tries up to 3 times
+    if retry_count < 3:
+      print(f'Retrying {owner}/{name}: #{retry_count+1}')
+      return get_paginated(
+        name = name,
+        owner = owner,
+        max_value = max_value,
+        total_count = total_count,
+        page_size = page_size,
+        cursor = cursor,
+        query = query,
+        results = results,
+        use_backup_token = use_backup_token,
+        rate_limit_info = rate_limit_info,
+        row_count = row_count,
+        retry_count = retry_count+1
+      )
+    else:
+      return None
+
+  # Transforms data and adds to array
   tranformed_data = transform_pr_data(pull_requests['nodes'], f'{owner}/{name}')
   results += tranformed_data
+
+  total_count_from_req = pull_requests['totalCount']
+
+  # If total count of PRs is about the same as the supplied row count, don't recalculate
+  print('*********', cursor, row_count, total_count_from_req)
+  if cursor is None and row_count is not None and abs(total_count_from_req - row_count) < 30:
+    return None
+    
+  max_value = total_count_from_req
 
   if not pull_requests['pageInfo']['hasNextPage']:
     return results
@@ -59,10 +92,12 @@ def get_paginated(
     results = results,
     use_backup_token = use_backup_token,
     rate_limit_info = response['data']['rateLimit'],
+    row_count = row_count,
+    retry_count = 0
   )
 
 
-def fetch_data(repo_name: str, repo_owner: str, query: str, secondary_key: bool):
+def fetch_data(repo_name: str, repo_owner: str, query: str, secondary_key: bool, row_count: int):
   """ Entrypoint fetch function """
   data = []
   print(f'Making queries for {repo_owner}/{repo_name}')
@@ -76,8 +111,12 @@ def fetch_data(repo_name: str, repo_owner: str, query: str, secondary_key: bool)
     query = query,
     results = [],
     use_backup_token = secondary_key,
-    rate_limit_info = None
+    rate_limit_info = None,
+    row_count = row_count,
+    retry_count = 0
   )
+  if result is None:
+    return None
+  
   data.append(result)
-  print('*** \n')
   return data
