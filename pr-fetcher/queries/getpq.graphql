@@ -1,0 +1,31 @@
+{
+  repository(name: $name, owner: $owner) {
+    pullRequests(first: 100, after: $after) {
+      nodes {
+        state
+        changedFiles
+        addedLines: additions
+        removedLines: deletions
+        createdAt
+        closedAt
+        mergedAt
+        bodyText
+        participants {
+          totalCount
+        }
+        comments {
+          totalCount
+        }
+      }
+      pageInfo {
+        endCursor
+        hasNextPage
+      }
+    }
+  }
+  rateLimit {
+    resetAt
+    remaining
+    limit
+  }
+}
